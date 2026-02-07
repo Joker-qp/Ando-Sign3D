@@ -1,0 +1,5 @@
+res://main.tscn
+res://menu.tscn
+res://config.gd
+res://holo.gd
+res://websocket.gd

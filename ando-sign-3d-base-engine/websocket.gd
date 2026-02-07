@@ -1,84 +1,124 @@
-class_name WS extends Node
+class_name WS
+extends Node
 
-@export var websocket_url = "ws://192.168.1.3/ws"
-@export var config:Config = null 
+@export var websocket_url: String = "ws://192.168.1.3:80/ws"
+@export var config: Config = null 
 
-signal message_received
+signal message_received(msg: String)
 
-const heartbeatSeconds = 5
+const HEARTBEAT_SECONDS: int = 5
+const RECONNECT_DELAY: float = 2.0
+const MAX_RECONNECT_ATTEMPTS: int = 5
 
-# Our WebSocketClient instance.
-var socket = WebSocketPeer.new()
-var id:String = "";
-var heartbeat:SceneTreeTimer = null
-var connected:bool = false
+var socket: WebSocketPeer = WebSocketPeer.new()
+var id: String = ""
+var heartbeat: SceneTreeTimer = null
+var connected: bool = false
+var reconnect_attempts: int = 0
 
-
-func start(_id):
+func start(_id: String) -> void:
 	id = _id
-	connectws()
-	set_heartbeat_timer()
+	print("[WS] Starting WebSocket with ID: ", id)
+	_connect_websocket()
+	_set_heartbeat_timer()
 
-
-func connectws():
-	# Initiate connection to the given URL.
-	var err = socket.connect_to_url(websocket_url)
+func _connect_websocket() -> void:
+	print("[WS] Attempting to connect to: ", websocket_url)
+	
+	var err: Error = socket.connect_to_url(websocket_url)
 	if err != OK:
-		print("Unable to connect")
-		set_process(false)
-		var timer = get_tree().create_timer(2)
-		timer.timeout.connect(connectws)
+		print("[WS] ERROR: Failed to initiate connection. Error code: ", err)
+		reconnect_attempts += 1
+		
+		if reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
+			print("[WS] Retry attempt ", reconnect_attempts, "/", MAX_RECONNECT_ATTEMPTS)
+			set_process(false)
+			var timer: SceneTreeTimer = get_tree().create_timer(RECONNECT_DELAY)
+			timer.timeout.connect(_connect_websocket)
+		else:
+			print("[WS] Max reconnection attempts reached. Giving up.")
 	else:
-		# Wait for the socket to connect.
-		await get_tree().create_timer(2).timeout
+		print("[WS] Connection initiated, waiting for handshake...")
+		set_process(true)
 
-	connected = true
-
-
-func set_heartbeat_timer():
-		heartbeat = get_tree().create_timer(heartbeatSeconds)
-		heartbeat.timeout.connect(on_heartbeat)
-
-func on_heartbeat():
-		print("PING "+id)
-		socket.send_text("PING "+id)
-		set_heartbeat_timer()
-
-func _process(_delta):
-	if not connected:
+func _set_heartbeat_timer() -> void:
+	if heartbeat != null:
 		return
 	
-	# Call this in _process or _physics_process. Data transfer and state updates
-	# will only happen when calling this function.
+	heartbeat = get_tree().create_timer(HEARTBEAT_SECONDS)
+	heartbeat.timeout.connect(_on_heartbeat)
+
+func _on_heartbeat() -> void:
+	if connected and socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		print("[WS] Sending PING: ", id)
+		socket.send_text("PING " + id)
+	
+	heartbeat = null
+	_set_heartbeat_timer()
+
+func _process(_delta: float) -> void:
 	socket.poll()
-
-	# get_ready_state() tells you what state the socket is in.
-	var state = socket.get_ready_state()
-
-	# WebSocketPeer.STATE_OPEN means the socket is connected and ready
-	# to send and receive data.
-	if state == WebSocketPeer.STATE_OPEN:
-		while socket.get_available_packet_count():
-			var message = socket.get_packet().get_string_from_utf8()
-			print("Got data from server: ", message)
+	
+	var state: WebSocketPeer.State = socket.get_ready_state()
+	
+	match state:
+		WebSocketPeer.STATE_CONNECTING:
+			# Still connecting
+			pass
 			
-			if message.begins_with(id + " "):
-				# Remove our ID from the message and emit signal
-				var content = message.substr(id.length() + 1)
-				message_received.emit(content)
-			else:
-				message_received.emit(message)
+		WebSocketPeer.STATE_OPEN:
+			if not connected:
+				print("[WS] ✓ Successfully connected!")
+				connected = true
+				reconnect_attempts = 0
+			_handle_incoming_messages()
+		
+		WebSocketPeer.STATE_CLOSING:
+			print("[WS] Connection closing...")
+		
+		WebSocketPeer.STATE_CLOSED:
+			if connected:
+				_handle_disconnection()
 
-	# WebSocketPeer.STATE_CLOSING means the socket is closing.
-	# It is important to keep polling for a clean close.
-	elif state == WebSocketPeer.STATE_CLOSING:
-		pass
+func _handle_incoming_messages() -> void:
+	while socket.get_available_packet_count() > 0:
+		var packet: PackedByteArray = socket.get_packet()
+		var message: String = packet.get_string_from_utf8()
+		print("[WS] Received: ", message)
+		
+		var content: String = _extract_message_content(message)
+		message_received.emit(content)
 
-	# WebSocketPeer.STATE_CLOSED means the connection has fully closed.
-	# It is now safe to stop polling.
-	elif state == WebSocketPeer.STATE_CLOSED:
-		# The code will be -1 if the disconnection was not properly notified by the remote peer.
-		var code = socket.get_close_code()
-		print("WebSocket closed with code: %d. Clean: %s" % [code, code != -1])
-		connected = false # Stop processing.
-		connectws()
+func _extract_message_content(message: String) -> String:
+	if message.begins_with(id + " "):
+		return message.substr(id.length() + 1)
+	return message
+
+func _handle_disconnection() -> void:
+	var code: int = socket.get_close_code()
+	var reason: String = socket.get_close_reason()
+	var is_clean: bool = code != -1
+	
+	print("[WS] Disconnected - Code: %d, Clean: %s, Reason: %s" % [code, is_clean, reason])
+	
+	connected = false
+	reconnect_attempts = 0
+	
+	var timer: SceneTreeTimer = get_tree().create_timer(RECONNECT_DELAY)
+	timer.timeout.connect(_connect_websocket)
+
+func disconnect_websocket() -> void:
+	if socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		socket.close(1000, "Client closing")
+	connected = false
+	set_process(false)
+
+func send_message(msg: String) -> void:
+	if connected and socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		print("[WS] Sending: ", msg)
+		socket.send_text(msg)
+	else:
+		push_error("[WS] Cannot send message: WebSocket not connected")
+
+func _exit_tree() -> void:
+	disconnect_websocket()
