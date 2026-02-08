@@ -32,8 +32,8 @@ func main() {
 
 	go handleMessages()
 
-	fmt.Println("Server started on :80")
-	err := http.ListenAndServe(":80", nil)
+	fmt.Println("Server started on :8080")
+	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		panic("Error starting server: " + err.Error())
 	}

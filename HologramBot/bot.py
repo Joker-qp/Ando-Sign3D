@@ -1,4 +1,4 @@
-# bot.py - Geliştirilmiş Discord Bot
+# bot.py - Geliştirilmiş Discord Bot (Sadece Port 8080 Güncellemesi)
 
 import discord
 from discord.ext import commands, tasks
@@ -96,7 +96,8 @@ def save_config():
 async def check_hologram_device(ip: str) -> Dict[str, Any]:
     """Bir IP'de hologram cihazı olup olmadığını kontrol et"""
     try:
-        ws_url = f"ws://{ip}/ws"
+        # PORT 8080 OLARAK DEĞİŞTİRİLDİ
+        ws_url = f"ws://{ip}:8080/ws"
         async with asyncio.timeout(2):
             ws = await websockets.connect(ws_url)
             try:
@@ -170,7 +171,8 @@ async def connect_websocket(nickname: str) -> None:
         return
     
     device_id = device_info["device_id"]
-    websocket_url = f"ws://{device_info['ip']}/ws"
+    # PORT 8080 OLARAK DEĞİŞTİRİLDİ
+    websocket_url = f"ws://{device_info['ip']}:8080/ws"
     reconnect_delay = 3
     max_reconnect_delay = 30
     
@@ -375,7 +377,8 @@ async def discover(ctx, ip_range: str = "192.168.1"):
     for i, device in enumerate(found, 1):
         embed.add_field(
             name=f"Cihaz {i}",
-            value=f"🆔 ID: `{device['device_id']}`\n📡 IP: `{device['ip']}`",
+            # IP GÖRÜNÜMÜNE 8080 EKLENDİ
+            value=f"🆔 ID: `{device['device_id']}`\n📡 IP: `{device['ip']}:8080`",
             inline=False
         )
     
@@ -413,7 +416,8 @@ async def add(ctx, nickname: str, device_id: str, ip: str):
     )
     embed.add_field(name="Nickname", value=f"`{nickname}`", inline=True)
     embed.add_field(name="Device ID", value=f"`{device_id}`", inline=True)
-    embed.add_field(name="IP", value=f"`{ip}`", inline=True)
+    # GÖRÜNÜME 8080 EKLENDİ
+    embed.add_field(name="IP", value=f"`{ip}:8080`", inline=True)
     
     await ctx.send(embed=embed)
 
@@ -463,7 +467,8 @@ async def list_devices(ctx):
     
     for nickname, info in HOLOGRAM_DEVICES.items():
         status = "🟢 Bağlı" if websocket_connected_dict.get(nickname, False) else "🔴 Bağlı Değil"
-        value = f"{status}\n📡 IP: `{info['ip']}`\n🆔 ID: `{info['device_id']}`"
+        # GÖRÜNÜME 8080 EKLENDİ
+        value = f"{status}\n📡 IP: `{info['ip']}:8080`\n🆔 ID: `{info['device_id']}`"
         embed.add_field(name=nickname, value=value, inline=False)
     
     await ctx.send(embed=embed)
@@ -692,7 +697,8 @@ async def status(ctx):
         device_status = []
         for nickname, info in HOLOGRAM_DEVICES.items():
             status_icon = "🟢" if websocket_connected_dict.get(nickname, False) else "🔴"
-            device_status.append(f"{status_icon} **{nickname}** - {info['ip']}")
+            # GÖRÜNÜME 8080 EKLENDİ
+            device_status.append(f"{status_icon} **{nickname}** - {info['ip']}:8080")
         
         embed.add_field(
             name=f"🌐 Cihazlar ({len(HOLOGRAM_DEVICES)})",
@@ -779,11 +785,11 @@ async def help_cmd(ctx, command_name: str = None):
     embed.add_field(
         name="🌐 Cihaz Yönetimi",
         value="```\n"
-              "!keşfet [ip]     - Ağdaki cihazları bul\n"
+              "!keşfet [ip]      - Ağdaki cihazları bul\n"
               "!ekle <nick> <id> <ip> - Cihaz ekle\n"
               "!çıkar <nick>    - Cihaz çıkar\n"
-              "!liste           - Cihazları listele\n"
-              "!durum           - Durum göster\n"
+              "!liste            - Cihazları listele\n"
+              "!durum            - Durum göster\n"
               "```",
         inline=False
     )
@@ -792,13 +798,13 @@ async def help_cmd(ctx, command_name: str = None):
     embed.add_field(
         name="🎮 Kontrol",
         value="```\n"
-              "!model <url>     - 3D model yükle\n"
-              "!video <url>     - Video oynat\n"
-              "!durdur          - Videoyu durdur\n"
-              "!rpm <değer>     - Dönüş hızı\n"
+              "!model <url>      - 3D model yükle\n"
+              "!video <url>      - Video oynat\n"
+              "!durdur           - Videoyu durdur\n"
+              "!rpm <değer>      - Dönüş hızı\n"
               "!faz <derece>    - Faz açısı\n"
               "!ışık <değer>    - Işık yoğunluğu\n"
-              "!sıfırla         - Animasyonu sıfırla\n"
+              "!sıfırla          - Animasyonu sıfırla\n"
               "```",
         inline=False
     )
@@ -818,7 +824,7 @@ async def help_cmd(ctx, command_name: str = None):
     embed.add_field(
         name="ℹ️ Diğer",
         value="```\n"
-              "!ping            - Bot gecikmesi\n"
+              "!ping             - Bot gecikmesi\n"
               "!yardım [komut]  - Yardım menüsü\n"
               "```",
         inline=False
