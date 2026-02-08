@@ -1,0 +1,312 @@
+# 🌐 Hologram Kontrol Merkezi - GUI
+
+Discord bot'unuzun tüm özelliklerini içeren profesyonel masaüstü uygulaması.
+
+## 📋 Özellikler
+
+### ✅ Tüm Bot Özellikleri
+- ✅ Cihaz keşfi ve otomatik ağ taraması
+- ✅ WebSocket üzerinden cihaz yönetimi
+- ✅ 3D model yükleme (tekrar ve döngü desteği ile)
+- ✅ Video oynatma ve kontrolü
+- ✅ RPM, Faz, Işık ayarları
+- ✅ Model kısayolları
+- ✅ Tüm cihazlara toplu komut gönderme
+- ✅ Gerçek zamanlı bağlantı durumu
+- ✅ İstatistik ve durum takibi
+
+### 🎨 GUI Özellikleri
+- Modern CustomTkinter arayüzü
+- Karanlık/Aydınlık tema desteği
+- Renk teması seçenekleri
+- Canlı cihaz durumu göstergeleri
+- Komut geçmişi ve loglar
+- Kolay ayar yönetimi
+
+## 🚀 Kurulum
+
+### 1. Gereksinimleri Yükleyin
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Uygulamayı Başlatın
+
+```bash
+python hologram_gui.py
+```
+
+## 📖 Kullanım Kılavuzu
+
+### 🌐 Cihaz Yönetimi
+
+#### Cihaz Ekleme (Manuel)
+1. Sol menüden **"📋 Cihazlar"** seçeneğine tıklayın
+2. **"➕ Cihaz Ekle"** butonuna basın
+3. Aşağıdaki bilgileri girin:
+   - **Takma Ad**: Cihaza vereceğiniz isim (örn: holo1)
+   - **Cihaz ID**: WebSocket'ten dönen ID (örn: DEVICE_192_168_1_100)
+   - **IP Adresi**: Cihazın IP'si (örn: 192.168.1.100)
+4. **"✅ Ekle"** butonuna basın
+
+#### Cihaz Bulma (Otomatik)
+1. Sol menüden **"🔍 Tarama"** seçeneğine tıklayın
+2. IP aralığını girin (örn: 192.168.1)
+3. **"🔍 Taramayı Başlat"** butonuna basın
+4. Bulunan cihazları **"➕ Ekle"** butonu ile ekleyin
+
+#### Cihaz Bağlantısı
+- Eklenen cihazlar otomatik olarak bağlanmaya çalışır
+- 🟢 **Yeşil ikon** = Bağlı
+- 🔴 **Kırmızı ikon** = Bağlı değil
+- Manuel bağlantı için **"🔗 Bağlan"** butonunu kullanın
+- Bağlantıyı kesmek için **"🔌 Bağlantıyı Kes"** butonunu kullanın
+
+### 🎮 Kontrol Paneli
+
+#### 3D Model Yükleme
+1. Sol menüden **"🎮 Kontrol"** seçeneğine tıklayın
+2. **"🎬 3D Model Yükle"** bölümüne gidin
+3. Model URL'sini girin (örn: https://example.com/model.glb)
+4. İsteğe bağlı parametreler:
+   - **Tekrar**: Model kaç kez oynatılacak (örn: 3)
+   - **Sonsuz Döngü**: Model sürekli oynatılsın mı?
+5. **"📤 Gönder"** butonuna basın
+
+**Komut örnekleri:**
+- Tek seferlik: `model https://example.com/cube.glb`
+- 5 kez tekrar: `model https://example.com/cube.glb repeat=5`
+- Sonsuz döngü: `model https://example.com/cube.glb loop`
+
+#### Video Oynatma
+1. **"🎥 Video Oynat"** bölümüne gidin
+2. Video URL'sini girin (örn: https://example.com/video.ogv)
+3. **"▶️ Oynat"** butonuna basın
+4. Durdurmak için **"⏹️ Durdur"** butonuna basın
+
+#### Parametre Ayarları
+1. **⚡ RPM** (Dönüş Hızı): 100-1000 arası slider ile ayarlayın
+2. **🔄 Faz** (Açı): 0-360 derece arası ayarlayın
+3. **💡 Işık** (Yoğunluk): 0-3 arası ayarlayın
+4. Her ayarı **"Set"** butonu ile uygulayın
+5. Tüm ayarları sıfırlamak için **"🔄 Tümünü Sıfırla"** butonunu kullanın
+
+### 🔖 Kısayollar
+
+Sık kullanılan modeller için kısayol oluşturun:
+
+#### Kısayol Ekleme
+1. Sol menüden **"🔖 Kısayollar"** seçeneğine tıklayın
+2. **"➕ Kısayol Ekle"** butonuna basın
+3. Bilgileri doldurun:
+   - **Kelime**: Kısayol adı (örn: küp)
+   - **Model URL**: Model adresi
+   - **Açıklama**: Opsiyonel açıklama
+4. **"✅ Ekle"** butonuna basın
+
+#### Kısayol Kullanma
+- Kısayol kartındaki **"▶️ Çalıştır"** butonuna basın
+- Model tüm bağlı cihazlara gönderilir
+
+### 📊 Durum ve İstatistikler
+
+**"📊 Durum"** sayfasında şunları görebilirsiniz:
+- ⏱️ Uygulama çalışma süresi
+- 🌐 Toplam kayıtlı cihaz sayısı
+- 🟢 Şu anda bağlı olan cihaz sayısı
+- 📤 Gönderilen toplam mesaj sayısı
+- 🔍 Keşfedilen toplam cihaz sayısı
+- 🔖 Tanımlı kısayol sayısı
+
+### ⚙️ Ayarlar
+
+**"⚙️ Ayarlar"** sayfasında yapılandırabileceğiniz seçenekler:
+
+#### Görünüm
+- **🎨 Tema**: dark (karanlık), light (aydınlık), system (sistem ayarı)
+- **🎨 Renk Teması**: blue, green, dark-blue
+
+#### Ağ Ayarları
+- **Port**: WebSocket portu (varsayılan: 8080)
+- **Varsayılan IP Aralığı**: Tarama için IP aralığı (örn: 192.168.1)
+
+#### Zaman Aşımı Ayarları
+- **Tarama Timeout**: Cihaz taramasında bekleme süresi (saniye)
+- **Yeniden Bağlanma**: Bağlantı koptuğunda yeniden deneme süresi (saniye)
+- **Heartbeat Aralığı**: Cihazlara PING gönderme aralığı (saniye)
+
+#### Komut Listesi
+Ayarlar sayfasında desteklenen tüm komutları görebilirsiniz.
+
+## 📡 WebSocket Komut Formatı
+
+Uygulamanın cihazlara gönderdiği komutlar:
+
+```
+<DEVICE_ID> <KOMUT>
+```
+
+### Örnek Komutlar
+
+```bash
+# Model yükleme
+DEVICE_192_168_1_100 model https://example.com/cube.glb
+
+# Tekrarlı model
+DEVICE_192_168_1_100 model https://example.com/cube.glb repeat=5
+
+# Sonsuz döngü
+DEVICE_192_168_1_100 model https://example.com/cube.glb loop
+
+# Video oynat
+DEVICE_192_168_1_100 video https://example.com/video.ogv
+
+# Video durdur
+DEVICE_192_168_1_100 stop_video
+
+# RPM ayarla
+DEVICE_192_168_1_100 rpm 450
+
+# Faz ayarla
+DEVICE_192_168_1_100 phase 90
+
+# Işık ayarla
+DEVICE_192_168_1_100 light 1.5
+
+# Sıfırla
+DEVICE_192_168_1_100 reset
+
+# Heartbeat (otomatik)
+PING DEVICE_192_168_1_100
+
+# ID al
+GET_ID
+```
+
+## 💾 Dosya Yapısı
+
+```
+hologram_gui.py          # Ana uygulama
+requirements.txt         # Python bağımlılıkları
+gui_config.json         # Cihaz ve kısayol ayarları (otomatik oluşur)
+gui_settings.json       # Uygulama ayarları (otomatik oluşur)
+gui.log                 # Uygulama logları (otomatik oluşur)
+```
+
+## 🔧 Ayar Dosyaları
+
+### gui_config.json
+Cihazlar ve kısayollar bu dosyada saklanır:
+
+```json
+{
+  "devices": {
+    "holo1": {
+      "device_id": "DEVICE_192_168_1_100",
+      "ip": "192.168.1.100",
+      "added_at": "2025-02-08T15:30:00"
+    }
+  },
+  "shortcuts": {
+    "küp": {
+      "url": "https://example.com/cube.glb",
+      "description": "Dönen küp",
+      "added_at": "2025-02-08T15:35:00"
+    }
+  }
+}
+```
+
+### gui_settings.json
+Uygulama ayarları:
+
+```json
+{
+  "theme": "dark",
+  "color_theme": "blue",
+  "default_port": 8080,
+  "scan_timeout": 2,
+  "reconnect_delay": 3,
+  "heartbeat_interval": 5,
+  "default_ip_range": "192.168.1"
+}
+```
+
+## 🐛 Sorun Giderme
+
+### Cihaz Bağlanamıyor
+1. IP adresini ve portu kontrol edin
+2. Cihazın çalıştığından emin olun
+3. Ağ bağlantısını kontrol edin
+4. Firewall ayarlarını kontrol edin
+5. `gui.log` dosyasını inceleyin
+
+### Tarama Hiçbir Cihaz Bulamıyor
+1. IP aralığının doğru olduğundan emin olun
+2. Cihazların aynı ağda olduğunu kontrol edin
+3. Timeout süresini artırın (Ayarlar > Tarama Timeout)
+4. Ping yanıtlarının açık olduğundan emin olun
+
+### Bağlantı Sürekli Kopuyor
+1. Ağ bağlantınızı kontrol edin
+2. Heartbeat aralığını ayarlayın (Ayarlar)
+3. Yeniden bağlanma süresini artırın (Ayarlar)
+
+### Komutlar Gitmiyor
+1. Cihazın bağlı olduğundan emin olun (🟢 yeşil ikon)
+2. Device ID'nin doğru olduğunu kontrol edin
+3. Komut formatının doğru olduğunu kontrol edin
+4. Log panelinden hata mesajlarını inceleyin
+
+## 📝 Log Dosyası
+
+`gui.log` dosyasında detaylı loglar bulunur:
+
+```
+2025-02-08 15:30:00 - INFO - ✅ Bot giriş yaptı
+2025-02-08 15:30:05 - INFO - ✅ [holo1] Bağlandı: 192.168.1.100
+2025-02-08 15:30:10 - INFO - 📤 [holo1] Komut gönderildi: model https://...
+```
+
+## 🎯 İpuçları
+
+1. **Çoklu Cihaz Yönetimi**: Tüm komutlar otomatik olarak tüm bağlı cihazlara gönderilir
+2. **Kısayollar**: Sık kullandığınız modeller için mutlaka kısayol oluşturun
+3. **Otomatik Bağlanma**: Kaydedilen cihazlar uygulama her açıldığında otomatik bağlanır
+4. **Gerçek Zamanlı Durum**: Alt köşedeki durum göstergesi bağlantı durumunu gösterir
+5. **Tema Özelleştirme**: Göz yorgunluğuna göre tema seçimi yapın
+
+## 🔒 Güvenlik Notları
+
+- WebSocket bağlantıları şifrelenmemiştir (ws://)
+- Güvenli ağlarda kullanın
+- Hassas veriler için VPN kullanın
+- Firewall kurallarını düzenli kontrol edin
+
+## 🆚 Discord Bot vs GUI
+
+| Özellik | Discord Bot | GUI |
+|---------|------------|-----|
+| Cihaz Ekleme | ✅ | ✅ |
+| Ağ Taraması | ✅ | ✅ |
+| Model Yükleme | ✅ | ✅ |
+| Video Oynatma | ✅ | ✅ |
+| Parametre Kontrolü | ✅ | ✅ |
+| Kısayollar | ✅ | ✅ |
+| İstatistikler | ✅ | ✅ |
+| Görsel Arayüz | ❌ | ✅ |
+| Uzaktan Erişim | ✅ | ❌ |
+| Çoklu Kullanıcı | ✅ | ❌ |
+
+## 📞 Destek
+
+Sorunlarınız için:
+1. `gui.log` dosyasını inceleyin
+2. Ayarları kontrol edin
+3. Cihaz bağlantılarını test edin
+4. Ağ yapılandırmanızı gözden geçirin
+
+## 🎉 Keyifli Kullanımlar!
+
+Hologram cihazlarınızı kontrol etmenin keyfini çıkarın! 🌟
