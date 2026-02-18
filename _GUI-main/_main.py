@@ -1,6 +1,8 @@
 """
 Hologram Kontrol GUI - CustomTkinter
 Discord bot özelliklerinin tamamını içeren masaüstü uygulaması
++ Gelişmiş Çeviri ve Ses Tanıma Modülü
++ Akıllı Kısayol Eşleştirme Sistemi
 """
 
 import customtkinter as ctk
@@ -16,6 +18,24 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 import logging
 from pathlib import Path
+
+# Yeni kütüphaneler
+try:
+    from deep_translator import GoogleTranslator
+    from langdetect import detect, LangDetectException
+    TRANSLATION_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Çeviri modülü yüklenemedi: {e}")
+    print("Lütfen şu komutu çalıştırın: pip install deep-translator langdetect")
+    TRANSLATION_AVAILABLE = False
+
+try:
+    import speech_recognition as sr
+    SPEECH_AVAILABLE = True
+except ImportError:
+    print("⚠️ Ses tanıma modülü yüklenemedi")
+    print("Lütfen şu komutu çalıştırın: pip install SpeechRecognition pyaudio")
+    SPEECH_AVAILABLE = False
 
 # ===== LOGGING AYARLARI =====
 logging.basicConfig(
@@ -45,7 +65,11 @@ class HologramConfig:
             "scan_timeout": 2,
             "reconnect_delay": 3,
             "heartbeat_interval": 5,
-            "default_ip_range": "192.168.1"
+            "default_ip_range": "192.168.1",
+            "translation_source": "auto",
+            "translation_target": "tr",
+            "mic_timeout": 5,
+            "mic_phrase_time": 3
         }
         self.load_all()
     
@@ -100,6 +124,229 @@ class HologramConfig:
             logger.error(f"Ayarlar kaydetme hatası: {e}")
 
 
+class TranslationModule:
+    """Çeviri ve ses tanıma modülü"""
+    
+    def __init__(self, config: HologramConfig):
+        self.config = config
+        self.recognizer = None
+        self.microphone = None
+        self.is_listening = False
+        
+        if SPEECH_AVAILABLE:
+            try:
+                self.recognizer = sr.Recognizer()
+                self.microphone = sr.Microphone()
+                logger.info("✅ Ses tanıma modülü hazır")
+            except Exception as e:
+                logger.error(f"❌ Ses tanıma başlatılamadı: {e}")
+    
+    def translate_content(self, text: str, target_lang: str = None) -> Dict[str, Any]:
+        """Metni otomatik algılayıp hedef dile çevir"""
+        if not TRANSLATION_AVAILABLE:
+            return {
+                "success": False,
+                "original": text,
+                "translated": "",
+                "detected_lang": "",
+                "error": "Çeviri modülü yüklü değil."
+            }
+        
+        if not text or not text.strip():
+            return {
+                "success": False,
+                "original": "",
+                "translated": "",
+                "detected_lang": "",
+                "error": "Boş metin çevrilemez!"
+            }
+        
+        if target_lang is None:
+            target_lang = self.config.settings.get("translation_target", "tr")
+        
+        try:
+            try:
+                detected_lang = detect(text)
+            except LangDetectException:
+                detected_lang = "en"
+            
+            logger.info(f"🔍 Algılanan dil: {detected_lang}")
+            
+            if detected_lang == target_lang:
+                return {
+                    "success": True,
+                    "original": text,
+                    "translated": text,
+                    "detected_lang": detected_lang,
+                    "error": ""
+                }
+            
+            translator = GoogleTranslator(source=detected_lang, target=target_lang)
+            translated_text = translator.translate(text)
+            
+            logger.info(f"✅ Çeviri başarılı: {detected_lang} → {target_lang}")
+            
+            return {
+                "success": True,
+                "original": text,
+                "translated": translated_text,
+                "detected_lang": detected_lang,
+                "error": ""
+            }
+            
+        except Exception as e:
+            error_msg = f"Çeviri hatası: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "original": text,
+                "translated": "",
+                "detected_lang": "",
+                "error": error_msg
+            }
+    
+    def translate_content_manual(self, text: str, source_lang: str, target_lang: str) -> Dict[str, Any]:
+        """Manuel kaynak ve hedef dil ile çevir"""
+        if not TRANSLATION_AVAILABLE:
+            return {
+                "success": False,
+                "original": text,
+                "translated": "",
+                "detected_lang": "",
+                "error": "Çeviri modülü yüklü değil."
+            }
+        
+        if not text or not text.strip():
+            return {
+                "success": False,
+                "original": "",
+                "translated": "",
+                "detected_lang": "",
+                "error": "Boş metin çevrilemez!"
+            }
+        
+        try:
+            if source_lang == target_lang:
+                return {
+                    "success": True,
+                    "original": text,
+                    "translated": text,
+                    "detected_lang": source_lang,
+                    "error": "Kaynak ve hedef dil aynı, çeviri yapılmadı."
+                }
+            
+            translator = GoogleTranslator(source=source_lang, target=target_lang)
+            translated_text = translator.translate(text)
+            
+            logger.info(f"✅ Çeviri başarılı: {source_lang} → {target_lang}")
+            
+            return {
+                "success": True,
+                "original": text,
+                "translated": translated_text,
+                "detected_lang": source_lang,
+                "error": ""
+            }
+            
+        except Exception as e:
+            error_msg = f"Çeviri hatası: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "original": text,
+                "translated": "",
+                "detected_lang": "",
+                "error": error_msg
+            }
+    
+    def capture_voice(self, timeout: int = None, phrase_time_limit: int = None) -> Dict[str, Any]:
+        """Mikrofonu dinleyip sesi metne dönüştür"""
+        if not SPEECH_AVAILABLE:
+            return {
+                "success": False,
+                "text": "",
+                "error": "Ses tanıma modülü yüklü değil."
+            }
+        
+        if self.recognizer is None or self.microphone is None:
+            return {
+                "success": False,
+                "text": "",
+                "error": "Ses tanıma modülü kullanılamıyor."
+            }
+        
+        if timeout is None:
+            timeout = self.config.settings.get("mic_timeout", 5)
+        
+        if phrase_time_limit is None:
+            phrase_time_limit = self.config.settings.get("mic_phrase_time", 3)
+        
+        try:
+            self.is_listening = True
+            logger.info("🎤 Mikrofon dinleniyor...")
+            
+            with self.microphone as source:
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                audio = self.recognizer.listen(
+                    source,
+                    timeout=timeout,
+                    phrase_time_limit=phrase_time_limit
+                )
+            
+            self.is_listening = False
+            logger.info("🔊 Ses kaydedildi, tanınıyor...")
+            
+            text = self.recognizer.recognize_google(audio, language='tr-TR')
+            
+            logger.info(f"✅ Ses tanındı: {text}")
+            
+            return {
+                "success": True,
+                "text": text,
+                "error": ""
+            }
+            
+        except sr.WaitTimeoutError:
+            self.is_listening = False
+            error_msg = "Zaman aşımı: Mikrofon sesi algılamadı"
+            logger.warning(f"⏱️ {error_msg}")
+            return {
+                "success": False,
+                "text": "",
+                "error": error_msg
+            }
+        
+        except sr.UnknownValueError:
+            self.is_listening = False
+            error_msg = "Ses anlaşılamadı, lütfen tekrar deneyin"
+            logger.warning(f"❓ {error_msg}")
+            return {
+                "success": False,
+                "text": "",
+                "error": error_msg
+            }
+        
+        except sr.RequestError as e:
+            self.is_listening = False
+            error_msg = f"Google API hatası: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "text": "",
+                "error": error_msg
+            }
+        
+        except Exception as e:
+            self.is_listening = False
+            error_msg = f"Bilinmeyen hata: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            return {
+                "success": False,
+                "text": "",
+                "error": error_msg
+            }
+
+
 class WebSocketManager:
     """WebSocket bağlantı yöneticisi"""
     
@@ -125,7 +372,6 @@ class WebSocketManager:
         thread = threading.Thread(target=run_loop, daemon=True)
         thread.start()
         
-        # Loop'un başlaması için kısa bekleme
         import time
         time.sleep(0.1)
     
@@ -156,14 +402,12 @@ class WebSocketManager:
                 pass
             return None
         
-        # Ping tüm IP'leri
         ping_tasks = [ping_ip(i) for i in range(1, 255)]
         ping_results = await asyncio.gather(*ping_tasks)
         active_ips = [ip for ip in ping_results if ip is not None]
         
         logger.info(f"📡 {len(active_ips)} aktif IP bulundu")
         
-        # WebSocket kontrolü
         ws_tasks = [self.check_device(ip) for ip in active_ips]
         ws_results = await asyncio.gather(*ws_tasks)
         found_devices = [device for device in ws_results if device["found"]]
@@ -181,12 +425,10 @@ class WebSocketManager:
             async with asyncio.timeout(self.config.settings["scan_timeout"]):
                 ws = await websockets.connect(ws_url)
                 try:
-                    # PING gönder
                     await ws.send("PING")
                     async with asyncio.timeout(2):
                         response = await ws.recv()
                     
-                    # ID iste
                     await ws.send("GET_ID")
                     try:
                         async with asyncio.timeout(1):
@@ -227,7 +469,6 @@ class WebSocketManager:
                     logger.info(f"✅ [{nickname}] Bağlandı: {device_info['ip']}")
                     
                     try:
-                        # Heartbeat döngüsü
                         while self.connected.get(nickname, False):
                             await ws.send(f"PING {device_id}")
                             logger.debug(f"[{nickname}] PING gönderildi")
@@ -246,7 +487,6 @@ class WebSocketManager:
                 await asyncio.sleep(reconnect_delay)
                 reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
         
-        # Cleanup
         self.connected[nickname] = False
         if nickname in self.connections:
             del self.connections[nickname]
@@ -316,53 +556,41 @@ class HologramGUI:
     def __init__(self):
         self.config = HologramConfig()
         self.ws_manager = WebSocketManager(self.config)
+        self.translation_module = TranslationModule(self.config)
         
-        # Tema ayarları
         ctk.set_appearance_mode(self.config.settings["theme"])
         ctk.set_default_color_theme(self.config.settings["color_theme"])
         
-        # Ana pencere
         self.root = ctk.CTk()
         self.root.title("🌐 Hologram Kontrol Merkezi")
         self.root.geometry("1200x800")
         
-        # WebSocket loop'u başlat
         self.ws_manager.start_loop()
         
-        # GUI'yi oluştur
         self.create_gui()
-        
-        # Kaydedilmiş cihazlara bağlan
         self.connect_saved_devices()
-        
-        # Periyodik güncelleme
         self.update_status()
     
     def create_gui(self):
         """GUI bileşenlerini oluştur"""
-        # Ana grid
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
         
-        # Sol panel - Menü
         self.create_sidebar()
         
-        # Sağ panel - İçerik
         self.main_frame = ctk.CTkFrame(self.root)
         self.main_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
         self.main_frame.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_rowconfigure(0, weight=1)
         
-        # İlk sayfa
         self.show_devices_page()
     
     def create_sidebar(self):
         """Sol menü çubuğunu oluştur"""
         sidebar = ctk.CTkFrame(self.root, width=200, corner_radius=0)
         sidebar.grid(row=0, column=0, sticky="nsew")
-        sidebar.grid_rowconfigure(10, weight=1)
+        sidebar.grid_rowconfigure(11, weight=1)
         
-        # Logo/Başlık
         title = ctk.CTkLabel(
             sidebar, 
             text="🌐 Hologram\nKontrol",
@@ -370,12 +598,12 @@ class HologramGUI:
         )
         title.grid(row=0, column=0, padx=20, pady=20)
         
-        # Menü butonları
         buttons = [
             ("📋 Cihazlar", self.show_devices_page),
             ("🎮 Kontrol", self.show_control_page),
             ("🔖 Kısayollar", self.show_shortcuts_page),
             ("🔍 Tarama", self.show_scan_page),
+            ("🗣️ Çeviri", self.show_translation_page),
             ("📊 Durum", self.show_status_page),
             ("⚙️ Ayarlar", self.show_settings_page),
         ]
@@ -390,24 +618,623 @@ class HologramGUI:
             )
             btn.grid(row=i, column=0, padx=20, pady=10, sticky="ew")
         
-        # Durum göstergesi (en altta)
         self.status_label = ctk.CTkLabel(
             sidebar,
             text="🔴 Bağlantı Yok",
             font=ctk.CTkFont(size=12)
         )
-        self.status_label.grid(row=11, column=0, padx=20, pady=20)
+        self.status_label.grid(row=12, column=0, padx=20, pady=20)
     
     def clear_main_frame(self):
         """Ana içerik alanını temizle"""
         for widget in self.main_frame.winfo_children():
             widget.destroy()
     
+    # ==================== YENİ: KISAYOL EŞLEŞTIRME FONKSİYONLARI ====================
+    
+    def find_matching_shortcut(self, translated_text: str) -> Optional[tuple[str, Dict[str, Any]]]:
+        """Çeviri sonucuna göre eşleşen kısayol bul"""
+        if not self.config.shortcuts:
+            return None
+        
+        search_text = translated_text.lower().strip()
+        
+        # Tam eşleşme
+        if search_text in self.config.shortcuts:
+            return (search_text, self.config.shortcuts[search_text])
+        
+        # Kısmi eşleşme
+        for keyword, info in self.config.shortcuts.items():
+            if keyword in search_text or search_text in keyword:
+                return (keyword, info)
+        
+        return None
+    
+    def show_shortcut_match_dialog(self, keyword: str, shortcut_info: Dict[str, Any], translated_text: str):
+        """Kısayol bulundu dialog'u"""
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("🎯 Kısayol Bulundu!")
+        dialog.geometry("500x350")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        ctk.CTkLabel(
+            dialog,
+            text="✨ Eşleşen Kısayol Bulundu!",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color="#4ECDC4"
+        ).pack(pady=20)
+        
+        info_frame = ctk.CTkFrame(dialog)
+        info_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            info_frame,
+            text=f"📝 Çeviri Sonucu:",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(pady=(10, 5))
+        
+        ctk.CTkLabel(
+            info_frame,
+            text=f'"{translated_text}"',
+            font=ctk.CTkFont(size=14),
+            text_color="#95A5A6"
+        ).pack(pady=5)
+        
+        ctk.CTkLabel(
+            info_frame,
+            text=f"🔖 Bulunan Kısayol:",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(pady=(15, 5))
+        
+        ctk.CTkLabel(
+            info_frame,
+            text=f"!{keyword}",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color="#4ECDC4"
+        ).pack(pady=5)
+        
+        ctk.CTkLabel(
+            info_frame,
+            text=f"🔗 {shortcut_info['url']}",
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        ).pack(pady=5)
+        
+        if shortcut_info.get('description'):
+            ctk.CTkLabel(
+                info_frame,
+                text=f"📄 {shortcut_info['description']}",
+                font=ctk.CTkFont(size=11),
+                text_color="gray"
+            ).pack(pady=5)
+        
+        ctk.CTkLabel(
+            dialog,
+            text="Bu modeli cihazlara göndermek ister misiniz?",
+            font=ctk.CTkFont(size=13)
+        ).pack(pady=15)
+        
+        btn_frame = ctk.CTkFrame(dialog)
+        btn_frame.pack(pady=15)
+        
+        def play_shortcut():
+            self.run_shortcut(keyword)
+            dialog.destroy()
+            self.update_translation_info(f"▶️ '{keyword}' kısayolu çalıştırıldı!", "green")
+        
+        def close_dialog():
+            dialog.destroy()
+            self.update_translation_info(f"ℹ️ Kısayol çalıştırılmadı", "gray")
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="▶️ Oynat",
+            command=play_shortcut,
+            fg_color="#4ECDC4",
+            hover_color="#3DA9A1",
+            width=150,
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(side="left", padx=10)
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="❌ İptal",
+            command=close_dialog,
+            fg_color="#95A5A6",
+            hover_color="#7F8C8D",
+            width=150,
+            height=40,
+            font=ctk.CTkFont(size=14)
+        ).pack(side="left", padx=10)
+    
+    def show_no_shortcut_dialog(self, translated_text: str):
+        """Kısayol bulunamadı dialog'u"""
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("ℹ️ Kısayol Bulunamadı")
+        dialog.geometry("450x250")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        ctk.CTkLabel(
+            dialog,
+            text="🔍",
+            font=ctk.CTkFont(size=50)
+        ).pack(pady=20)
+        
+        ctk.CTkLabel(
+            dialog,
+            text="Kısayol Bulunamadı",
+            font=ctk.CTkFont(size=18, weight="bold")
+        ).pack(pady=10)
+        
+        ctk.CTkLabel(
+            dialog,
+            text=f'"{translated_text}" için\neşleşen bir kısayol bulunamadı.',
+            font=ctk.CTkFont(size=13),
+            text_color="gray"
+        ).pack(pady=10)
+        
+        ctk.CTkButton(
+            dialog,
+            text="Tamam",
+            command=dialog.destroy,
+            width=150,
+            height=40,
+            font=ctk.CTkFont(size=14)
+        ).pack(pady=20)
+    
+    def check_and_show_shortcut(self, translated_text: str):
+        """Çeviri sonucunu kontrol et ve eşleşen kısayol varsa göster"""
+        match = self.find_matching_shortcut(translated_text)
+        
+        if match:
+            keyword, shortcut_info = match
+            logger.info(f"🎯 Kısayol eşleşmesi bulundu: '{keyword}' → '{translated_text}'")
+            self.show_shortcut_match_dialog(keyword, shortcut_info, translated_text)
+        else:
+            logger.info(f"🔍 '{translated_text}' için kısayol bulunamadı")
+            self.show_no_shortcut_dialog(translated_text)
+    
+    # ==================== ÇEVİRİ SAYFASI ====================
+    
+    def show_translation_page(self):
+        """Çeviri ve ses tanıma sayfası"""
+        self.clear_main_frame()
+        
+        title = ctk.CTkLabel(
+            self.main_frame,
+            text="🗣️ Çeviri ve Ses Tanıma",
+            font=ctk.CTkFont(size=24, weight="bold")
+        )
+        title.grid(row=0, column=0, padx=20, pady=20, sticky="w")
+        
+        container = ctk.CTkFrame(self.main_frame)
+        container.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
+        self.main_frame.grid_rowconfigure(1, weight=1)
+        
+        # GİRİŞ ALANI
+        input_frame = ctk.CTkFrame(container)
+        input_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            input_frame,
+            text="📝 Metin Girişi:",
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(pady=10)
+        
+        self.translation_input = ctk.CTkTextbox(input_frame, height=120)
+        self.translation_input.pack(fill="x", padx=20, pady=5)
+        
+        btn_frame = ctk.CTkFrame(input_frame)
+        btn_frame.pack(pady=10)
+        
+        mic_container = ctk.CTkFrame(btn_frame, fg_color="transparent")
+        mic_container.pack(side="left", padx=5)
+        
+        self.mic_button = ctk.CTkButton(
+            mic_container,
+            text="🎤 Sesi Dinle",
+            command=self.start_voice_capture,
+            fg_color="#FF6B6B",
+            hover_color="#CC5555",
+            width=150,
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.mic_button.pack()
+        
+        self.mic_indicator = ctk.CTkLabel(
+            mic_container,
+            text="⚪ Hazır",
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        self.mic_indicator.pack(pady=2)
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="🌐 Çevir",
+            command=self.translate_text,
+            fg_color="#4ECDC4",
+            hover_color="#3DA9A1",
+            width=150,
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(side="left", padx=5)
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="🗑️ Temizle",
+            command=self.clear_translation,
+            fg_color="#95A5A6",
+            hover_color="#7F8C8D",
+            width=120,
+            height=40
+        ).pack(side="left", padx=5)
+        
+        # ÇIKTI ALANI
+        output_frame = ctk.CTkFrame(container)
+        output_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            output_frame,
+            text="🎯 Çeviri Sonucu:",
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(pady=10)
+        
+        self.translation_output = ctk.CTkTextbox(output_frame, height=150)
+        self.translation_output.pack(fill="both", expand=True, padx=20, pady=5)
+        self.translation_output.configure(state="disabled")
+        
+        self.translation_info_label = ctk.CTkLabel(
+            output_frame,
+            text="ℹ️ Metin girin veya mikrofona konuşun",
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        self.translation_info_label.pack(pady=10)
+        
+        # DİL AYARLARI
+        settings_frame = ctk.CTkFrame(container)
+        settings_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            settings_frame,
+            text="⚙️ Çeviri Ayarları:",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(pady=10)
+        
+        lang_selection_frame = ctk.CTkFrame(settings_frame)
+        lang_selection_frame.pack(pady=10)
+        
+        self.languages = [
+            ("🔄 Otomatik Algıla", "auto"),
+            ("🇹🇷 Türkçe", "tr"),
+            ("🇬🇧 İngilizce", "en"),
+            ("🇩🇪 Almanca", "de"),
+            ("🇫🇷 Fransızca", "fr"),
+            ("🇪🇸 İspanyolca", "es"),
+            ("🇮🇹 İtalyanca", "it"),
+            ("🇷🇺 Rusça", "ru"),
+            ("🇨🇳 Çince (Basitleştirilmiş)", "zh-CN"),
+            ("🇯🇵 Japonca", "ja"),
+            ("🇰🇷 Korece", "ko"),
+            ("🇸🇦 Arapça", "ar"),
+            ("🇵🇹 Portekizce", "pt"),
+            ("🇳🇱 Hollandaca", "nl"),
+            ("🇵🇱 Lehçe", "pl"),
+            ("🇬🇷 Yunanca", "el"),
+            ("🇮🇳 Hintçe", "hi"),
+            ("🇹🇭 Tayca", "th"),
+            ("🇻🇳 Vietnamca", "vi"),
+            ("🇮🇩 Endonezce", "id"),
+            ("🇸🇪 İsveççe", "sv"),
+            ("🇳🇴 Norveççe", "no"),
+            ("🇩🇰 Danca", "da"),
+            ("🇫🇮 Fince", "fi"),
+            ("🇨🇿 Çekçe", "cs"),
+            ("🇭🇺 Macarca", "hu"),
+            ("🇷🇴 Rumence", "ro"),
+            ("🇺🇦 Ukraynaca", "uk"),
+            ("🇮🇷 Farsça", "fa"),
+            ("🇮🇱 İbranice", "he")
+        ]
+        
+        self.lang_codes = {lang[0]: lang[1] for lang in self.languages}
+        self.lang_names = {lang[1]: lang[0] for lang in self.languages}
+        
+        # Kaynak Dil
+        source_lang_frame = ctk.CTkFrame(lang_selection_frame)
+        source_lang_frame.pack(side="left", padx=10)
+        
+        ctk.CTkLabel(
+            source_lang_frame,
+            text="📥 Kaynak Dil:",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(pady=5)
+        
+        self.source_lang_var = ctk.StringVar(
+            value=self.config.settings.get("translation_source", "auto")
+        )
+        
+        self.source_lang_menu = ctk.CTkOptionMenu(
+            source_lang_frame,
+            values=[lang[0] for lang in self.languages],
+            variable=self.source_lang_var,
+            command=self.update_source_language,
+            width=250,
+            font=ctk.CTkFont(size=12)
+        )
+        self.source_lang_menu.pack(pady=5)
+        
+        current_source = self.config.settings.get("translation_source", "auto")
+        if current_source in self.lang_names:
+            self.source_lang_menu.set(self.lang_names[current_source])
+        
+        # Ok
+        arrow_frame = ctk.CTkFrame(lang_selection_frame, fg_color="transparent")
+        arrow_frame.pack(side="left", padx=20)
+        
+        ctk.CTkLabel(
+            arrow_frame,
+            text="➡️",
+            font=ctk.CTkFont(size=30)
+        ).pack(pady=30)
+        
+        # Hedef Dil
+        target_lang_frame = ctk.CTkFrame(lang_selection_frame)
+        target_lang_frame.pack(side="left", padx=10)
+        
+        ctk.CTkLabel(
+            target_lang_frame,
+            text="📤 Hedef Dil:",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(pady=5)
+        
+        self.target_lang_var = ctk.StringVar(
+            value=self.config.settings.get("translation_target", "tr")
+        )
+        
+        target_languages = [lang for lang in self.languages if lang[1] != "auto"]
+        
+        self.target_lang_menu = ctk.CTkOptionMenu(
+            target_lang_frame,
+            values=[lang[0] for lang in target_languages],
+            variable=self.target_lang_var,
+            command=self.update_target_language,
+            width=250,
+            font=ctk.CTkFont(size=12)
+        )
+        self.target_lang_menu.pack(pady=5)
+        
+        current_target = self.config.settings.get("translation_target", "tr")
+        if current_target in self.lang_names:
+            self.target_lang_menu.set(self.lang_names[current_target])
+        
+        # Dil değiştir
+        swap_btn_frame = ctk.CTkFrame(settings_frame)
+        swap_btn_frame.pack(pady=10)
+        
+        ctk.CTkButton(
+            swap_btn_frame,
+            text="🔄 Dilleri Değiştir",
+            command=self.swap_languages,
+            width=200,
+            height=35,
+            font=ctk.CTkFont(size=13)
+        ).pack()
+        
+        # Hızlı çeviri
+        quick_frame = ctk.CTkFrame(settings_frame)
+        quick_frame.pack(pady=10)
+        
+        ctk.CTkLabel(
+            quick_frame,
+            text="⚡ Hızlı Çeviri:",
+            font=ctk.CTkFont(size=12)
+        ).pack(side="left", padx=10)
+        
+        quick_translations = [
+            ("🇹🇷→🇬🇧", "tr", "en"),
+            ("🇬🇧→🇹🇷", "en", "tr"),
+            ("🇹🇷→🇩🇪", "tr", "de"),
+            ("🇩🇪→🇹🇷", "de", "tr"),
+        ]
+        
+        for label, source, target in quick_translations:
+            ctk.CTkButton(
+                quick_frame,
+                text=label,
+                command=lambda s=source, t=target: self.set_quick_translation(s, t),
+                width=80,
+                height=30,
+                font=ctk.CTkFont(size=11)
+            ).pack(side="left", padx=3)
+    
+    def update_source_language(self, selected: str):
+        """Kaynak dili güncelle"""
+        lang_code = self.lang_codes.get(selected, "auto")
+        self.config.settings["translation_source"] = lang_code
+        self.config.save_settings()
+        logger.info(f"📥 Kaynak dil değiştirildi: {lang_code}")
+    
+    def update_target_language(self, selected: str):
+        """Hedef dili güncelle"""
+        lang_code = self.lang_codes.get(selected, "tr")
+        
+        if lang_code == "auto":
+            self.update_translation_info("⚠️ Hedef dil 'Otomatik' olamaz!", "orange")
+            self.target_lang_menu.set(self.lang_names["tr"])
+            self.config.settings["translation_target"] = "tr"
+            return
+        
+        self.config.settings["translation_target"] = lang_code
+        self.config.save_settings()
+        logger.info(f"📤 Hedef dil değiştirildi: {lang_code}")
+    
+    def swap_languages(self):
+        """Dilleri değiştir"""
+        source = self.config.settings.get("translation_source", "auto")
+        target = self.config.settings.get("translation_target", "tr")
+        
+        if source == "auto":
+            self.update_translation_info("⚠️ Otomatik algılama aktifken dil değiştirilemez!", "orange")
+            return
+        
+        self.config.settings["translation_source"] = target
+        self.config.settings["translation_target"] = source
+        self.config.save_settings()
+        
+        self.source_lang_menu.set(self.lang_names[target])
+        self.target_lang_menu.set(self.lang_names[source])
+        
+        self.update_translation_info(f"🔄 Diller değiştirildi: {self.lang_names[target]} ↔️ {self.lang_names[source]}", "blue")
+    
+    def set_quick_translation(self, source: str, target: str):
+        """Hızlı çeviri ayarla"""
+        self.config.settings["translation_source"] = source
+        self.config.settings["translation_target"] = target
+        self.config.save_settings()
+        
+        self.source_lang_menu.set(self.lang_names[source])
+        self.target_lang_menu.set(self.lang_names[target])
+        
+        self.update_translation_info(f"⚡ {self.lang_names[source]} → {self.lang_names[target]} ayarlandı", "green")
+    
+    def update_mic_indicator(self, status: str):
+        """Mikrofon göstergesini güncelle"""
+        if hasattr(self, 'mic_indicator'):
+            if status == "listening":
+                self.mic_indicator.configure(text="🔴 Dinleniyor...", text_color="#FF6B6B")
+            elif status == "processing":
+                self.mic_indicator.configure(text="⚙️ İşleniyor...", text_color="#FFA500")
+            elif status == "idle":
+                self.mic_indicator.configure(text="⚪ Hazır", text_color="gray")
+            elif status == "error":
+                self.mic_indicator.configure(text="❌ Hata", text_color="red")
+    
+    def start_voice_capture(self):
+        """Ses yakalamayı başlat"""
+        self.mic_button.configure(state="disabled", text="🎤 Dinleniyor...")
+        self.update_translation_info("🎤 Lütfen konuşun...", "orange")
+        self.update_mic_indicator("listening")
+        
+        def capture_thread():
+            try:
+                result = self.translation_module.capture_voice()
+                self.root.after(0, lambda: self.handle_voice_result(result))
+            except Exception as e:
+                logger.error(f"Ses yakalama hatası: {e}")
+                self.root.after(0, lambda: self.update_translation_info(f"❌ Hata: {str(e)}", "red"))
+                self.root.after(0, lambda: self.update_mic_indicator("error"))
+            finally:
+                self.root.after(0, lambda: self.mic_button.configure(state="normal", text="🎤 Sesi Dinle"))
+        
+        thread = threading.Thread(target=capture_thread, daemon=True)
+        thread.start()
+    
+    def handle_voice_result(self, result: Dict[str, Any]):
+        """Ses tanıma sonucunu işle"""
+        if result["success"]:
+            self.update_mic_indicator("processing")
+            
+            self.translation_input.delete("1.0", "end")
+            self.translation_input.insert("1.0", result["text"])
+            
+            self.update_translation_info(f"✅ Ses tanındı: \"{result['text']}\"", "green")
+            
+            self.translate_text()
+            
+            self.root.after(2000, lambda: self.update_mic_indicator("idle"))
+        else:
+            self.update_translation_info(f"❌ {result['error']}", "red")
+            self.update_mic_indicator("error")
+            self.root.after(2000, lambda: self.update_mic_indicator("idle"))
+    
+    def translate_text(self):
+        """Metni çevir"""
+        text = self.translation_input.get("1.0", "end-1c").strip()
+        
+        if not text:
+            self.update_translation_info("⚠️ Lütfen metin girin!", "orange")
+            return
+        
+        self.update_translation_info("🔄 Çevriliyor...", "blue")
+        
+        def translate_thread():
+            try:
+                source_lang = self.config.settings.get("translation_source", "auto")
+                target_lang = self.config.settings.get("translation_target", "tr")
+                
+                if source_lang == "auto":
+                    result = self.translation_module.translate_content(text, target_lang)
+                else:
+                    result = self.translation_module.translate_content_manual(text, source_lang, target_lang)
+                
+                self.root.after(0, lambda: self.handle_translation_result(result))
+                
+            except Exception as e:
+                logger.error(f"Çeviri hatası: {e}")
+                self.root.after(0, lambda: self.update_translation_info(f"❌ Hata: {str(e)}", "red"))
+        
+        thread = threading.Thread(target=translate_thread, daemon=True)
+        thread.start()
+    
+    def handle_translation_result(self, result: Dict[str, Any]):
+        """Çeviri sonucunu göster - KISAYOL KONTROLÜ EKLENDİ"""
+        if result["success"]:
+            self.translation_output.configure(state="normal")
+            self.translation_output.delete("1.0", "end")
+            self.translation_output.insert("1.0", result["translated"])
+            self.translation_output.configure(state="disabled")
+            
+            source_lang = self.config.settings.get("translation_source", "auto")
+            target_lang = self.config.settings.get("translation_target", "tr")
+            
+            if source_lang == "auto":
+                detected = result["detected_lang"].upper()
+                target = target_lang.upper()
+                self.update_translation_info(f"✅ Çeviri tamamlandı (Algılanan: {detected} → {target})", "green")
+            else:
+                source = source_lang.upper()
+                target = target_lang.upper()
+                self.update_translation_info(f"✅ Çeviri tamamlandı ({source} → {target})", "green")
+            
+            # KISAYOL KONTROLÜ
+            self.root.after(500, lambda: self.check_and_show_shortcut(result["translated"]))
+            
+        else:
+            self.update_translation_info(f"❌ {result['error']}", "red")
+    
+    def clear_translation(self):
+        """Çeviri alanlarını temizle"""
+        self.translation_input.delete("1.0", "end")
+        self.translation_output.configure(state="normal")
+        self.translation_output.delete("1.0", "end")
+        self.translation_output.configure(state="disabled")
+        
+        source = self.config.settings.get("translation_source", "auto")
+        target = self.config.settings.get("translation_target", "tr")
+        
+        source_name = self.lang_names.get(source, "Bilinmiyor")
+        target_name = self.lang_names.get(target, "Bilinmiyor")
+        
+        self.update_translation_info(f"ℹ️ Hazır: {source_name} → {target_name}", "gray")
+        self.update_mic_indicator("idle")
+    
+    def update_translation_info(self, message: str, color: str = "gray"):
+        """Bilgi etiketini güncelle"""
+        if hasattr(self, 'translation_info_label'):
+            self.translation_info_label.configure(text=message, text_color=color)
+    
+    # ==================== DİĞER SAYFALAR (AYNEN KALDI) ====================
+    
     def show_devices_page(self):
         """Cihazlar sayfası"""
         self.clear_main_frame()
         
-        # Başlık
         title = ctk.CTkLabel(
             self.main_frame,
             text="📋 Kayıtlı Cihazlar",
@@ -415,27 +1242,23 @@ class HologramGUI:
         )
         title.grid(row=0, column=0, padx=20, pady=20, sticky="w")
         
-        # Buton çerçevesi
         btn_frame = ctk.CTkFrame(self.main_frame)
         btn_frame.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
         
-        add_btn = ctk.CTkButton(
+        ctk.CTkButton(
             btn_frame,
             text="➕ Cihaz Ekle",
             command=self.show_add_device_dialog,
             font=ctk.CTkFont(size=14)
-        )
-        add_btn.pack(side="left", padx=5)
+        ).pack(side="left", padx=5)
         
-        refresh_btn = ctk.CTkButton(
+        ctk.CTkButton(
             btn_frame,
             text="🔄 Yenile",
             command=self.refresh_devices_list,
             font=ctk.CTkFont(size=14)
-        )
-        refresh_btn.pack(side="left", padx=5)
+        ).pack(side="left", padx=5)
         
-        # Cihaz listesi (scrollable)
         self.devices_scroll = ctk.CTkScrollableFrame(self.main_frame)
         self.devices_scroll.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
         self.main_frame.grid_rowconfigure(2, weight=1)
@@ -451,13 +1274,12 @@ class HologramGUI:
             widget.destroy()
         
         if not self.config.devices:
-            no_device = ctk.CTkLabel(
+            ctk.CTkLabel(
                 self.devices_scroll,
                 text="Henüz kayıtlı cihaz yok.\n'Cihaz Ekle' veya 'Tarama' sayfasından cihaz ekleyebilirsiniz.",
                 font=ctk.CTkFont(size=14),
                 text_color="gray"
-            )
-            no_device.pack(pady=50)
+            ).pack(pady=50)
             return
         
         for nickname, info in self.config.devices.items():
@@ -465,72 +1287,59 @@ class HologramGUI:
     
     def create_device_card(self, nickname: str, info: Dict[str, Any]):
         """Cihaz kartı oluştur"""
-        # Kart çerçevesi
         card = ctk.CTkFrame(self.devices_scroll)
         card.pack(fill="x", padx=10, pady=5)
         
-        # Sol taraf - Bilgiler
         info_frame = ctk.CTkFrame(card)
         info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
         
-        # Durum ikonu
         is_connected = self.ws_manager.connected.get(nickname, False)
         status_icon = "🟢" if is_connected else "🔴"
-        status_text = "Bağlı" if is_connected else "Bağlı Değil"
         
-        # Başlık
-        title_label = ctk.CTkLabel(
+        ctk.CTkLabel(
             info_frame,
             text=f"{status_icon} {nickname}",
             font=ctk.CTkFont(size=18, weight="bold")
-        )
-        title_label.pack(anchor="w")
+        ).pack(anchor="w")
         
-        # Detaylar
         port = self.config.settings["default_port"]
-        details = ctk.CTkLabel(
+        ctk.CTkLabel(
             info_frame,
             text=f"📡 IP: {info['ip']}:{port}\n🆔 ID: {info['device_id']}\n📅 Eklenme: {info.get('added_at', 'Bilinmiyor')[:10]}",
             font=ctk.CTkFont(size=12),
             justify="left"
-        )
-        details.pack(anchor="w", pady=5)
+        ).pack(anchor="w", pady=5)
         
-        # Sağ taraf - Butonlar
         btn_frame = ctk.CTkFrame(card)
         btn_frame.pack(side="right", padx=10, pady=10)
         
-        # Bağlan/Kes butonu
         if is_connected:
-            conn_btn = ctk.CTkButton(
+            ctk.CTkButton(
                 btn_frame,
                 text="🔌 Bağlantıyı Kes",
                 command=lambda: self.disconnect_device(nickname),
                 fg_color="red",
                 hover_color="darkred",
                 width=150
-            )
+            ).pack(pady=2)
         else:
-            conn_btn = ctk.CTkButton(
+            ctk.CTkButton(
                 btn_frame,
                 text="🔗 Bağlan",
                 command=lambda: self.connect_device(nickname),
                 fg_color="green",
                 hover_color="darkgreen",
                 width=150
-            )
-        conn_btn.pack(pady=2)
+            ).pack(pady=2)
         
-        # Sil butonu
-        del_btn = ctk.CTkButton(
+        ctk.CTkButton(
             btn_frame,
             text="🗑️ Sil",
             command=lambda: self.remove_device(nickname),
             fg_color="darkred",
             hover_color="red",
             width=150
-        )
-        del_btn.pack(pady=2)
+        ).pack(pady=2)
     
     def show_add_device_dialog(self):
         """Cihaz ekleme dialog'u"""
@@ -540,25 +1349,20 @@ class HologramGUI:
         dialog.transient(self.root)
         dialog.grab_set()
         
-        # Form
         ctk.CTkLabel(dialog, text="Cihaz Bilgileri", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
         
-        # Nickname
         ctk.CTkLabel(dialog, text="Takma Ad (Nickname):").pack(pady=5)
         nickname_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="örn: holo1")
         nickname_entry.pack(pady=5)
         
-        # Device ID
         ctk.CTkLabel(dialog, text="Cihaz ID:").pack(pady=5)
         id_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="örn: DEVICE_192_168_1_100")
         id_entry.pack(pady=5)
         
-        # IP
         ctk.CTkLabel(dialog, text="IP Adresi:").pack(pady=5)
         ip_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="örn: 192.168.1.100")
         ip_entry.pack(pady=5)
         
-        # Hata mesajı
         error_label = ctk.CTkLabel(dialog, text="", text_color="red")
         error_label.pack(pady=10)
         
@@ -575,23 +1379,16 @@ class HologramGUI:
                 error_label.configure(text="❌ Bu takma ad zaten kullanılıyor!")
                 return
             
-            # Cihazı ekle
             self.config.devices[nickname] = {
                 "device_id": device_id,
                 "ip": ip,
                 "added_at": datetime.now().isoformat()
             }
             self.config.save_config()
-            
-            # Bağlan
             self.connect_device(nickname)
-            
-            # Listeyi yenile
             self.refresh_devices_list()
-            
             dialog.destroy()
         
-        # Butonlar
         btn_frame = ctk.CTkFrame(dialog)
         btn_frame.pack(pady=20)
         
@@ -610,7 +1407,6 @@ class HologramGUI:
     
     def remove_device(self, nickname: str):
         """Cihazı sil"""
-        # Onay dialog'u
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("⚠️ Onay")
         dialog.geometry("400x200")
@@ -641,7 +1437,6 @@ class HologramGUI:
         """Kontrol sayfası"""
         self.clear_main_frame()
         
-        # Başlık
         title = ctk.CTkLabel(
             self.main_frame,
             text="🎮 Cihaz Kontrolü",
@@ -649,11 +1444,9 @@ class HologramGUI:
         )
         title.grid(row=0, column=0, padx=20, pady=20, sticky="w")
         
-        # Üst panel - Komutlar (scrollable)
         top_panel = ctk.CTkScrollableFrame(self.main_frame)
         top_panel.grid(row=1, column=0, padx=20, pady=(10, 5), sticky="nsew")
         
-        # Alt panel - Log
         bottom_panel = ctk.CTkFrame(self.main_frame)
         bottom_panel.grid(row=2, column=0, padx=20, pady=(5, 10), sticky="nsew")
         
@@ -661,7 +1454,6 @@ class HologramGUI:
         self.main_frame.grid_rowconfigure(1, weight=3)
         self.main_frame.grid_rowconfigure(2, weight=1)
         
-        # === MODEL YÜKLEME ===
         model_frame = ctk.CTkFrame(top_panel)
         model_frame.pack(fill="x", padx=10, pady=10)
         
@@ -671,7 +1463,6 @@ class HologramGUI:
         model_url_entry = ctk.CTkEntry(model_frame, width=400, placeholder_text="https://example.com/model.glb")
         model_url_entry.pack(pady=5)
         
-        # Tekrar parametreleri
         param_frame = ctk.CTkFrame(model_frame)
         param_frame.pack(pady=10)
         
@@ -703,7 +1494,6 @@ class HologramGUI:
         
         ctk.CTkButton(model_frame, text="📤 Gönder", command=send_model, width=200).pack(pady=10)
         
-        # === VİDEO OYNAT ===
         video_frame = ctk.CTkFrame(top_panel)
         video_frame.pack(fill="x", padx=10, pady=10)
         
@@ -731,13 +1521,11 @@ class HologramGUI:
             fg_color="red"
         ).pack(side="left", padx=5)
         
-        # === PARAMETRE AYARLARI ===
         params_frame = ctk.CTkFrame(top_panel)
         params_frame.pack(fill="x", padx=10, pady=10)
         
         ctk.CTkLabel(params_frame, text="⚙️ Parametre Ayarları", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
         
-        # RPM
         rpm_frame = ctk.CTkFrame(params_frame)
         rpm_frame.pack(fill="x", padx=20, pady=5)
         
@@ -755,7 +1543,6 @@ class HologramGUI:
         
         ctk.CTkLabel(rpm_frame, text="(100-1000)", text_color="gray").pack(side="left", padx=5)
         
-        # Faz
         phase_frame = ctk.CTkFrame(params_frame)
         phase_frame.pack(fill="x", padx=20, pady=5)
         
@@ -773,7 +1560,6 @@ class HologramGUI:
         
         ctk.CTkLabel(phase_frame, text="(0-360°)", text_color="gray").pack(side="left", padx=5)
         
-        # Işık
         light_frame = ctk.CTkFrame(params_frame)
         light_frame.pack(fill="x", padx=20, pady=5)
         
@@ -791,7 +1577,6 @@ class HologramGUI:
         
         ctk.CTkLabel(light_frame, text="(0.0-3.0)", text_color="gray").pack(side="left", padx=5)
         
-        # Sıfırla
         ctk.CTkButton(
             params_frame,
             text="🔄 Tümünü Sıfırla",
@@ -800,7 +1585,6 @@ class HologramGUI:
             fg_color="orange"
         ).pack(pady=20)
         
-        # === LOG PANEL (ALT KISIM) ===
         ctk.CTkLabel(bottom_panel, text="📝 Komut Geçmişi", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=5)
         
         self.log_textbox = ctk.CTkTextbox(bottom_panel, height=150, state="disabled")
@@ -816,7 +1600,6 @@ class HologramGUI:
             width=100
         ).pack(side="left", padx=5)
         
-        # Otomatik scroll
         auto_scroll_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
             btn_frame_log,
@@ -860,7 +1643,6 @@ class HologramGUI:
         """Kısayollar sayfası"""
         self.clear_main_frame()
         
-        # Başlık
         title = ctk.CTkLabel(
             self.main_frame,
             text="🔖 Model Kısayolları",
@@ -868,7 +1650,6 @@ class HologramGUI:
         )
         title.grid(row=0, column=0, padx=20, pady=20, sticky="w")
         
-        # Butonlar
         btn_frame = ctk.CTkFrame(self.main_frame)
         btn_frame.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
         
@@ -886,7 +1667,6 @@ class HologramGUI:
             font=ctk.CTkFont(size=14)
         ).pack(side="left", padx=5)
         
-        # Kısayol listesi
         self.shortcuts_scroll = ctk.CTkScrollableFrame(self.main_frame)
         self.shortcuts_scroll.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
         self.main_frame.grid_rowconfigure(2, weight=1)
@@ -902,13 +1682,12 @@ class HologramGUI:
             widget.destroy()
         
         if not self.config.shortcuts:
-            no_shortcut = ctk.CTkLabel(
+            ctk.CTkLabel(
                 self.shortcuts_scroll,
                 text="Henüz kısayol yok.\n'Kısayol Ekle' butonuna tıklayarak kısayol oluşturabilirsiniz.",
                 font=ctk.CTkFont(size=14),
                 text_color="gray"
-            )
-            no_shortcut.pack(pady=50)
+            ).pack(pady=50)
             return
         
         for keyword, info in self.config.shortcuts.items():
@@ -919,34 +1698,29 @@ class HologramGUI:
         card = ctk.CTkFrame(self.shortcuts_scroll)
         card.pack(fill="x", padx=10, pady=5)
         
-        # Sol taraf
         info_frame = ctk.CTkFrame(card)
         info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
         
-        title_label = ctk.CTkLabel(
+        ctk.CTkLabel(
             info_frame,
             text=f"🔖 !{keyword}",
             font=ctk.CTkFont(size=18, weight="bold")
-        )
-        title_label.pack(anchor="w")
+        ).pack(anchor="w")
         
-        url_label = ctk.CTkLabel(
+        ctk.CTkLabel(
             info_frame,
             text=f"🔗 {info['url']}",
             font=ctk.CTkFont(size=12)
-        )
-        url_label.pack(anchor="w", pady=2)
+        ).pack(anchor="w", pady=2)
         
         if info.get('description'):
-            desc_label = ctk.CTkLabel(
+            ctk.CTkLabel(
                 info_frame,
                 text=f"📝 {info['description']}",
                 font=ctk.CTkFont(size=12),
                 text_color="gray"
-            )
-            desc_label.pack(anchor="w", pady=2)
+            ).pack(anchor="w", pady=2)
         
-        # Sağ taraf
         btn_frame = ctk.CTkFrame(card)
         btn_frame.pack(side="right", padx=10, pady=10)
         
@@ -976,17 +1750,14 @@ class HologramGUI:
         
         ctk.CTkLabel(dialog, text="Kısayol Bilgileri", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
         
-        # Keyword
         ctk.CTkLabel(dialog, text="Kelime (Keyword):").pack(pady=5)
         keyword_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="örn: küp")
         keyword_entry.pack(pady=5)
         
-        # URL
         ctk.CTkLabel(dialog, text="Model URL:").pack(pady=5)
         url_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="https://example.com/model.glb")
         url_entry.pack(pady=5)
         
-        # Açıklama
         ctk.CTkLabel(dialog, text="Açıklama (Opsiyonel):").pack(pady=5)
         desc_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="örn: Dönen küp modeli")
         desc_entry.pack(pady=5)
@@ -1061,7 +1832,6 @@ class HologramGUI:
         )
         title.grid(row=0, column=0, padx=20, pady=20, sticky="w")
         
-        # Tarama ayarları
         settings_frame = ctk.CTkFrame(self.main_frame)
         settings_frame.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
         
@@ -1079,12 +1849,10 @@ class HologramGUI:
         )
         scan_btn.pack(side="left", padx=10)
         
-        # Sonuç alanı
         result_frame = ctk.CTkScrollableFrame(self.main_frame)
         result_frame.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
         self.main_frame.grid_rowconfigure(2, weight=1)
         
-        # İlk mesaj
         ctk.CTkLabel(
             result_frame,
             text="Tarama başlatmak için yukarıdaki butona tıklayın.",
@@ -1094,11 +1862,9 @@ class HologramGUI:
     
     def start_scan(self, ip_range: str, result_frame):
         """Ağ taramasını başlat"""
-        # Temizle
         for widget in result_frame.winfo_children():
             widget.destroy()
         
-        # Loading
         loading = ctk.CTkLabel(
             result_frame,
             text=f"🔍 {ip_range}.x ağı taranıyor...\nBu işlem birkaç dakika sürebilir.",
@@ -1106,7 +1872,6 @@ class HologramGUI:
         )
         loading.pack(pady=50)
         
-        # Async tarama
         future = self.ws_manager.run_coroutine(
             self.ws_manager.scan_network(ip_range)
         )
@@ -1152,7 +1917,6 @@ class HologramGUI:
         card = ctk.CTkFrame(parent)
         card.pack(fill="x", padx=10, pady=5)
         
-        # Bilgiler
         info_frame = ctk.CTkFrame(card)
         info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
         
@@ -1169,9 +1933,7 @@ class HologramGUI:
             font=ctk.CTkFont(size=12)
         ).pack(anchor="w", pady=5)
         
-        # Ekle butonu
         def add_scanned_device():
-            # Otomatik nickname oluştur
             nickname = f"holo_{device['ip'].split('.')[-1]}"
             counter = 1
             while nickname in self.config.devices:
@@ -1186,7 +1948,6 @@ class HologramGUI:
             self.config.save_config()
             self.connect_device(nickname)
             
-            # Kart'ı güncelle
             for widget in card.winfo_children():
                 widget.destroy()
             
@@ -1228,11 +1989,9 @@ class HologramGUI:
         )
         title.pack(pady=20)
         
-        # İstatistikler
         stats_frame = ctk.CTkFrame(self.main_frame)
         stats_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
-        # Uptime
         uptime = datetime.now() - self.ws_manager.stats["uptime_start"]
         hours, remainder = divmod(int(uptime.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -1269,7 +2028,6 @@ class HologramGUI:
         stats_frame.grid_columnconfigure(0, weight=1)
         stats_frame.grid_columnconfigure(1, weight=1)
         
-        # Yenile butonu
         ctk.CTkButton(
             self.main_frame,
             text="🔄 Yenile",
@@ -1291,7 +2049,6 @@ class HologramGUI:
         settings_frame = ctk.CTkScrollableFrame(self.main_frame)
         settings_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
-        # Tema
         theme_frame = ctk.CTkFrame(settings_frame)
         theme_frame.pack(fill="x", padx=10, pady=10)
         
@@ -1314,7 +2071,6 @@ class HologramGUI:
                 command=change_theme
             ).pack(pady=2)
         
-        # Renk teması
         color_frame = ctk.CTkFrame(settings_frame)
         color_frame.pack(fill="x", padx=10, pady=10)
         
@@ -1327,7 +2083,6 @@ class HologramGUI:
             self.config.settings["color_theme"] = new_color
             self.config.save_settings()
             
-            # Uyarı
             info = ctk.CTkLabel(
                 color_frame,
                 text="⚠️ Renk değişikliği için uygulamayı yeniden başlatın.",
@@ -1344,13 +2099,11 @@ class HologramGUI:
                 command=change_color
             ).pack(pady=2)
         
-        # Ağ ayarları
         network_frame = ctk.CTkFrame(settings_frame)
         network_frame.pack(fill="x", padx=10, pady=10)
         
         ctk.CTkLabel(network_frame, text="🌐 Ağ Ayarları:", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
         
-        # Port
         port_frame = ctk.CTkFrame(network_frame)
         port_frame.pack(fill="x", padx=20, pady=5)
         
@@ -1365,7 +2118,6 @@ class HologramGUI:
         
         ctk.CTkButton(port_frame, text="💾 Kaydet", command=save_port, width=80).pack(side="left", padx=5)
         
-        # IP Aralığı
         ip_frame = ctk.CTkFrame(network_frame)
         ip_frame.pack(fill="x", padx=20, pady=5)
         
@@ -1380,13 +2132,11 @@ class HologramGUI:
         
         ctk.CTkButton(ip_frame, text="💾 Kaydet", command=save_ip, width=80).pack(side="left", padx=5)
         
-        # Zaman aşımı ayarları
         timeout_frame = ctk.CTkFrame(settings_frame)
         timeout_frame.pack(fill="x", padx=10, pady=10)
         
         ctk.CTkLabel(timeout_frame, text="⏱️ Zaman Aşımı Ayarları:", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
         
-        # Tarama timeout
         scan_frame = ctk.CTkFrame(timeout_frame)
         scan_frame.pack(fill="x", padx=20, pady=5)
         
@@ -1401,7 +2151,6 @@ class HologramGUI:
         
         ctk.CTkButton(scan_frame, text="💾 Kaydet", command=save_scan, width=80).pack(side="left", padx=5)
         
-        # Yeniden bağlanma
         reconnect_frame = ctk.CTkFrame(timeout_frame)
         reconnect_frame.pack(fill="x", padx=20, pady=5)
         
@@ -1416,7 +2165,6 @@ class HologramGUI:
         
         ctk.CTkButton(reconnect_frame, text="💾 Kaydet", command=save_reconnect, width=80).pack(side="left", padx=5)
         
-        # Heartbeat
         heartbeat_frame = ctk.CTkFrame(timeout_frame)
         heartbeat_frame.pack(fill="x", padx=20, pady=5)
         
@@ -1431,7 +2179,6 @@ class HologramGUI:
         
         ctk.CTkButton(heartbeat_frame, text="💾 Kaydet", command=save_heartbeat, width=80).pack(side="left", padx=5)
         
-        # Komut açıklamaları
         commands_frame = ctk.CTkFrame(settings_frame)
         commands_frame.pack(fill="x", padx=10, pady=10)
         
@@ -1449,7 +2196,6 @@ class HologramGUI:
 🏓 PING - Bağlantı testi
         """
         
-        ctk.CTkTextbox(commands_frame, height=250).pack(fill="x", padx=20, pady=10)
         commands_textbox = ctk.CTkTextbox(commands_frame, height=250)
         commands_textbox.pack(fill="x", padx=20, pady=10)
         commands_textbox.insert("1.0", commands_text.strip())
@@ -1474,7 +2220,6 @@ class HologramGUI:
         else:
             self.status_label.configure(text="🔴 Cihaz Yok", text_color="gray")
         
-        # 2 saniyede bir güncelle
         self.root.after(2000, self.update_status)
     
     def run(self):

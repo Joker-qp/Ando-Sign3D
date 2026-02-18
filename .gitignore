@@ -1,1 +1,6 @@
 .env
+bot.log
+bot_config.json
+gui_settings.json
+gui.log
+ui_config.json
