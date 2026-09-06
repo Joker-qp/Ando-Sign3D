@@ -1,0 +1,78 @@
+[workspace]
+name = "AndoSign"
+version = "1.0.0"
+description = "ASL/TİD Multi-Model Sign Language Recognition"
+authors = ["AndoSign Team"]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+# =======================================================
+# 1. TÜM ORTAMLARIN ORTAK BAĞIMLILIKLARI (Conda)
+# =======================================================
+
+[dependencies]
+python = "3.10.*"
+numpy = ">=1.23,<2.0"
+pandas = ">=2.0.0"
+pyarrow = ">=14.0.0"
+pyyaml = ">=6.0"
+tqdm = ">=4.65.0"
+scikit-learn = "*"
+rich = "*"
+matplotlib = "*"
+seaborn = "*"
+
+# Cluster 1: MediaPipe, PyTorch, ONNX, CodeCarbon, Scipy
+[feature.cluster-1.pypi-dependencies]
+torch = ">=2.0.0"
+torchvision = "*"
+opencv-python = ">=4.8.0"
+mediapipe = "==0.10.20"
+onnx = ">=1.15.0"
+onnxscript = "*"
+codecarbon = ">=2.3.0"
+scipy = "*"
+
+# --- Cluster 2: Spatio-Temporal GCN (M-05 - M-08, M-12, M-13) ---
+[feature.cluster-2.pypi-dependencies]
+torch = ">=2.0.0"
+torchvision = "*"
+opencv-python = ">=4.8.0"
+mediapipe = "==0.10.20"
+torch-geometric = "*"
+
+# --- Cluster 3: Pose-Transformers, DFE & SLM (M-09 - M-11, M-14, M-15, AUX-01) ---
+[feature.cluster-3.pypi-dependencies]
+torch = ">=2.0.0"
+transformers = ">=4.36.0"
+accelerate = "*"
+einops = "*"
+timm = "*"
+
+# --- Cluster 4: Direct RGB Video X3D (M-16) ---
+[feature.cluster-4.pypi-dependencies]
+torch = ">=2.0.0"
+torchvision = "*"
+decord = "*"
+pytorchvideo = "*"
+
+# --- GUI / Runtime Ortamı ---
+[feature.gui.dependencies]
+pyside6 = ">=6.5.0"
+
+[feature.gui.pypi-dependencies]
+onnxruntime-gpu = ">=1.16.0"
+pyzmq = "*"
+
+# =======================================================
+# 3. İZOLE ORTAM DERLEMELERİ
+# =======================================================
+[environments]
+env-cluster1 = ["cluster-1"]
+env-cluster2 = ["cluster-2"]
+env-cluster3 = ["cluster-3"]
+env-cluster4 = ["cluster-4"]
+env-gui = ["gui"]
+
+[pypi-dependencies]
+codecarbon = ">=3.3.0, <4"

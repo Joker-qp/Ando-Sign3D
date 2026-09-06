@@ -1,0 +1,31 @@
+2026-09-06 14:57:26,554 [INFO] No unused functions to remove
+2026-09-06 14:57:26,554 [WARNING] The model version conversion is not supported by the onnxscript version converter and fallback is enabled. The model will be converted using the onnx C API (target version: 17).
+2026-09-06 14:57:26,590 [INFO] Removed 83 unused nodes
+2026-09-06 14:57:26,590 [INFO] No unused functions to remove
+2026-09-06 14:57:26,591 [INFO] Skipping constant folding for node 'node_linear' because it is graph input to preserve graph signature
+2026-09-06 14:57:26,592 [INFO] Skipping constant folding for node 'node_linear_1' because it is graph input to preserve graph signature
+2026-09-06 14:57:26,629 [INFO] Removed 36 unused nodes
+2026-09-06 14:57:26,629 [INFO] Applied 9 of general pattern rewrite rules.
+2026-09-06 14:57:26,630 [INFO] No unused functions to remove
+2026-09-06 14:57:26,631 [INFO] Skipping constant folding for node 'node_Gemm_0' because it is graph input to preserve graph signature
+2026-09-06 14:57:26,631 [INFO] Skipping constant folding for node 'node_Gemm_1' because it is graph input to preserve graph signature
+2026-09-06 14:57:26,657 [INFO] No unused functions to remove
+2026-09-06 14:57:26,658 [INFO] PassManager: No more graph changes detected after step 1
+2026-09-06 14:57:26,660 [INFO] Replaced initializer 'val_27' with existing initializer 'val_14'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_30' with existing initializer 'val_17'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_32' with existing initializer 'val_19'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_46' with existing initializer 'val_14'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_49' with existing initializer 'val_17'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_51' with existing initializer 'val_19'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_59' with existing initializer 'val_14'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_62' with existing initializer 'val_17'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_64' with existing initializer 'val_19'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_78' with existing initializer 'val_14'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_81' with existing initializer 'val_17'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_83' with existing initializer 'val_19'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_91' with existing initializer 'val_14'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_94' with existing initializer 'val_17'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_96' with existing initializer 'val_19'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_98' with existing initializer 'val_14'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_101' with existing initializer 'val_17'
+2026-09-06 14:57:26,661 [INFO] Replaced initializer 'val_103' with existing initializer 'val_19'

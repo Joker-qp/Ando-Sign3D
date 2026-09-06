@@ -1,0 +1,65 @@
+# ==============================================================================
+# DOSYA: configs/preprocessing_rules.yaml
+# PROJE: AndoSign - Multimodal Sign Language AI Ecosystem
+# ROLÜ  : Veri Seti Kürasyonu, Kalite Güvencesi (QA) ve Bölümleme Kuralları
+# TÜKETİCİ MODÜL: src/common/io_manifest_reader.py (ManifestManager Sınıfı)
+#
+# AÇIKLAMA:
+#   Bu dosya, ham işaret dili veri setlerinin (ASL Alphabet, dataset5) taranması,
+#   kriptografik olarak mükerrerlerin ayıklanması, bulanıklık ve el sınır
+#   filtrelerinin uygulanması ve dengeli Train/Val/Test bölümlerinin oluşturulması
+#   sırasında kullanılan tüm eşik değerlerini ve dosya yollarını içerir.
+#
+# GİRDİLER (INPUTS):
+#   - Yok (Statik konfigürasyon dosyası).
+#
+# ÇIKTILAR (OUTPUTS):
+#   - ManifestManager sınıfı tarafından yüklenen yapılandırma sözlüğü (Dict[str, Any]).
+# ==============================================================================
+
+asl_letters_curation:
+  # ============================================================================
+  # 1. DİZİN VE DEPOLAMA YAPILANDIRMASI (STORAGE & PATHS)
+  # ============================================================================
+  # [Girdi] Taranacak ham veri kök dizini (ASL Alphabet ve dataset5 klasörlerini içerir)
+  raw_data_dir: "data/raw/asl_letters"
+
+  # [Çıktı] Tüm filtreleri başarıyla geçen temiz verilerin kaydedileceği Parquet dosyası
+  output_clean_manifest: "data/manifests/m01_asl_letters_clean.parquet"
+
+  # [Çıktı] Elenen ve kabul edilen tüm örneklerin denetim (audit) loglarının kaydedileceği Parquet dosyası
+  output_audit_manifest: "data/manifests/asl_letters_audit_full.parquet"
+
+  # ============================================================================
+  # 2. KALİTE GÜVENCESİ & GÖRÜNTÜ İŞLEME EŞİKLERİ (QA & CV THRESHOLDS)
+  # ============================================================================
+  # [Metrik: Keskinlik] Laplacian Operatörünün İkinci Türev Varyansı: Var(∇²I)
+  # - Tip: Float | Birim: Varyans Skoru | Geçerli Aralık: [0.0, ∞)
+  # - 80.0 altı: Aşırı bulanık, odaksız ve düşük çözünürlüklü kabul edilip elenir (DROPPED).
+  # - 80.0 ve üzeri: Net kenarlara sahip, kaliteli görsel kabul edilir (ACCEPTED).
+  blur_threshold: 80.0
+
+  # [Metrik: Biyometrik Sınır] El eklemlerinin kadraj kenarlarına olan minimum mesafesi
+  # - Tip: Float | Birim: Normalize Koordinat Payı (%2) | Geçerli Aralık: [0.0, 0.5]
+  # - Herhangi bir landmark x veya y ekseninde [0.02, 0.98] aralığının dışına taşarsa
+  #   parmak kesilmesi / kadraj dışı el kabul edilerek elenir (HAND_OUT_OF_FRAME).
+  frame_margin: 0.02
+
+  # [Metrik: Deteksiyon Güveni] MediaPipe Hands modelinin el tespit eşik skoru
+  # - Tip: Float | Birim: Olasılık | Geçerli Aralık: [0.0, 1.0]
+  # - Statik görüntü modunda el bulma güvenilirliği bu eşiğin altındaysa elenir (NO_HAND_DETECTED).
+  min_detection_confidence: 0.65
+
+  # ============================================================================
+  # 3. VERİ KÜMESİ BÖLÜMLEME & DETERMINİZM AYARLARI (SPLIT & REPRODUCIBILITY)
+  # ============================================================================
+  # [Bölümleme] Train verisinden doğrulamaya (Validation) ayrılacak oran (%15)
+  val_split_ratio: 0.15
+
+  # [Bölümleme] dataset5 Kişi E haricindeki sınıflar için test kümesine aktarılacak hedef oran (%15)
+  # - 'Z', 'J', 'SPACE', 'DELETE', 'NOTHING' sınıflarında sıfır test örneği krizini önler.
+  test_split_ratio: 0.15
+
+  # [Determinizm] Rastgele örnekleme ve stratifikasyon için sabit tohum değeri
+  # - Tüm çalıştırmalarda birebir aynı Train/Val/Test bölünmesini garanti eder.
+  random_seed: 42

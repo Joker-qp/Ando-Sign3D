@@ -1,0 +1,105 @@
+# ==============================================================================
+# DOSYA: configs/models/m01_asl_letters.yaml
+# PROJE: AndoSign - Multimodal Sign Language AI Ecosystem
+# MODEL KİMLİĞİ: L-ASL-01
+# MODEL ADI: Börü (ASL 26-Letter Residual Landmark Classifier)
+# ROLÜ  : Model M-01 Hiperparametre, Mimari ve Eğitim Yapılandırması
+# TÜKETİCİ MODÜLLER: 
+#   - src/models/m01_asl_letters/train.py (Ana Eğitim Boru Hattı)
+#   - src/common/academic_logger.py (Deney Takipçisi ve run_config.json Üreticisi)
+#   - src/common/report_generator.py (Model Kartı Üreticisi)
+#
+# AÇIKLAMA:
+#   Bu dosya; 'Börü' kod adlı ASL statik alfabe sınıflandırma modelinin veri kaynaklarını,
+#   Residual MLP katman boyutlarını, regularizasyon katsayılarını, kayıp fonksiyonu
+#   ayarlarını ve ONNX ihraç parametrelerini belirler.
+#
+# GİRDİLER (INPUTS):
+#   - Yok (Statik konfigürasyon dosyası).
+#
+# ÇIKTILAR (OUTPUTS):
+#   - PyTorch eğitim döngüsü tarafından tüketilen hiperparametre sözlüğü (Dict[str, Any]).
+# ==============================================================================
+
+# ==============================================================================
+# 1. MODEL KİMLİK VE ÜST VERİLERİ (METADATA)
+# ==============================================================================
+model_id: "L-ASL-01"                  # [Standart Kimlik] Modelin evrensel benzersiz kodu
+model_name: "Börü"                    # [Kod Adı] ASL harf sınıflandırıcısının resmi model adı
+language: "ASL"                       # [Dil Kapsamı] American Sign Language
+scope: "26 Alphabet Letters"          # [Görev Kapsamı] Yalnızca A-Z statik harfleri kapsar
+
+# ==============================================================================
+# 2. VERİ KAYNAKLARI VE SINIF YAPILANDIRMASI (DATA PIPELINE)
+# ==============================================================================
+data:
+  # [Girdi] QA aşamasından geçmiş temiz veri haritasının Parquet dosya yolu
+  manifest_path: "data/manifests/m01_asl_letters_clean.parquet"
+  
+  # [Çıktı / Önbellek] 21 el eklem noktasının 63-D normalize vektörlerinin saklandığı dizin
+  processed_dir: "data/processed/m01_asl_letters_21p"
+  
+  # [Filtre] True ise kontrol sınıflarını (SPACE, DELETE, NOTHING) eler, sadece A-Z alır
+  use_core_alphabet_only: true
+  
+  # [Sınıf Sayısı] Tahmin edilecek toplam çıkış sınıfı sayısı (26 Latin Harfi)
+  num_classes: 26
+
+# ==============================================================================
+# 3. DERİN ÖĞRENME MİMARİSİ (ARCHITECTURE SPECIFICATIONS)
+# ==============================================================================
+architecture:
+  # [Girdi Boyutu] 21 Landmark x 3 Eksen (x, y, z) = 63 elemanlı normalize koordinat vektörü
+  input_dim: 63
+  
+  # [Gizli Katmanlar] Residual Blokların genişlikleri (63 ➜ 256 ➜ 128 ➜ 64)
+  # - Her blok: Linear + BatchNorm1d + GELU + Dropout + Skip-Connection içerir.
+  hidden_dims: [256, 128, 64]
+  
+  # [Düzenlileştirme] Aşırı ezberlemeyi (overfitting) önleyen nöron kapatma oranı (%25)
+  dropout_rate: 0.25
+  
+  # [Aktivasyon Fonksiyonu] Negatif gradyanları pürüzsüz geçiren Gaussian Error Linear Unit
+  activation: "gelu"
+
+# ==============================================================================
+# 4. EĞİTİM VE OPTİMİZASYON STRATEJİSİ (TRAINING & OPTIMIZATION)
+# ==============================================================================
+training:
+  # [Batch Boyutu] Tek bir ileri/geri geçişte (step) işlenecek örnek sayısı
+  batch_size: 128
+  
+  # [Maksimum Epoch] Eğitimin süreceği maksimum tur sayısı
+  epochs: 50
+  
+  # [Başlangıç Öğrenme Oranı] AdamW optimizer başlangıç öğrenme hızı (lr = 1e-3)
+  learning_rate: 0.001
+  
+  # [Ağırlık Çürümesi] L2 katsayısı ile ağırlık büyümesini cezalandırma (Weight Decay = 1e-4)
+  weight_decay: 0.0001
+  
+  # [Etiket Yumuşatma] Modelin aşırı özgüvenli (over-confident) olmasını önleyen ceza katsayısı
+  label_smoothing: 0.05
+  
+  # [Dinamik Sınıf Ağırlıkları] True ise 3.7:1 oranındaki sınıf dengesizliğine karşı
+  # az örneğe sahip harflerin (Z, J vb.) kayıp fonksiyonundaki ceza katsayısını artırır.
+  use_class_weights: true
+  
+  # [Erken Durdurma] Doğrulama başarımı 10 epoch boyunca artmazsa eğitimi durdurur
+  early_stopping_patience: 10
+  
+  # [Determinizm] Rastgele ağırlık başlatma ve DataLoader karıştırma tohumu (Seed)
+  seed: 42
+
+# ==============================================================================
+# 5. MODEL İHRACI VE ÇIKARIM STANDARDI (EXPORT & INFERENCE)
+# ==============================================================================
+export:
+  # [Kayıt Dizini] Eğitilmiş PyTorch (.pth) ve ONNX ağırlıklarının saklanacağı hedef klasör
+  checkpoint_dir: "artifacts/m01_asl_letters/checkpoints"
+  
+  # [ONNX Dosya Adı] Çift ekranlı GUI ve canlı kamera çıkarımında kullanılacak optimize dosya
+  onnx_filename: "m01_asl_letters_best.onnx"
+  
+  # [ONNX Operatör Seti] Dinamik batch destekli Opset 17 standardı
+  onnx_opset: 17
